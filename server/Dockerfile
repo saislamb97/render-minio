@@ -1,9 +1,7 @@
 FROM minio/minio:latest
 
-# Render exposes one port; we'll use 9000 for S3 API (public on this service)
-# and 9090 for the console (internal, proxied by the console service).
-EXPOSE 9000 9090
-
-# Use a shell so ${PORT} etc are expanded, then exec so signals work properly.
+# Render gives your web service a single $PORT to listen on.
+# Bind S3 API to $PORT and bind console to a fixed internal port (9090).
+# MinIO supports choosing a specific console port via --console-address. :contentReference[oaicite:3]{index=3}
 ENTRYPOINT ["sh", "-c"]
-CMD ["exec minio server /data --address ${HOST:-0.0.0.0}:${PORT:-9000} --console-address ${HOST:-0.0.0.0}:${CONSOLE_PORT:-9090}"]
+CMD ["exec minio server /data --address :${PORT} --console-address :9090"]
