@@ -1,21 +1,14 @@
-upstream minio_console {
-    server ${MINIO_HOST}:${MINIO_CONSOLE_PORT};
-}
-
 server {
     listen ${PORT};
 
-    # Allow large uploads from the console (objects)
     client_max_body_size 0;
-
-    # Better for streaming / large uploads
     proxy_buffering off;
     proxy_request_buffering off;
 
     location / {
         proxy_http_version 1.1;
 
-        # Required for MinIO Console websockets
+        # WebSocket support (MinIO Console needs this)
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
@@ -28,9 +21,12 @@ server {
         proxy_read_timeout 900;
         proxy_send_timeout 900;
 
-        # Avoid chunked encoding issues with some proxies
         chunked_transfer_encoding off;
 
-        proxy_pass http://minio_console;
+        # Dynamic DNS resolution (prevents nginx startup crash on Render)
+        resolver ${RESOLVER} ipv6=off valid=30s;
+
+        set $upstream "http://${MINIO_HOST}:${MINIO_CONSOLE_PORT}";
+        proxy_pass $upstream;
     }
 }

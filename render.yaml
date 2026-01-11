@@ -18,11 +18,11 @@ services:
       - key: MINIO_ROOT_PASSWORD
         generateValue: true
 
-      # Optional but commonly useful for console redirects and external clients:
-      # - key: MINIO_SERVER_URL
-      #   value: "https://YOUR_MINIO_SERVER_PUBLIC_URL"
-      # - key: MINIO_BROWSER_REDIRECT_URL
-      #   value: "https://YOUR_MINIO_CONSOLE_PUBLIC_URL"
+      # Set to your public Render URLs
+      - key: MINIO_SERVER_URL
+        value: "https://minio-server-ns38.onrender.com"
+      - key: MINIO_BROWSER_REDIRECT_URL
+        value: "https://minio-console-xs8o.onrender.com"
 
   # -------------------------
   # MinIO Console (Public via Nginx proxy)
@@ -33,15 +33,10 @@ services:
     rootDir: console
     plan: starter
     envVars:
-      # Nginx listens on Render-provided $PORT automatically, so don't hardcode it.
-
-      # Internal host of minio-server on Render private network
       - key: MINIO_HOST
         fromService:
           name: minio-server
           type: web
           property: host
-
-      # Console port inside minio-server container
       - key: MINIO_CONSOLE_PORT
         value: "9090"

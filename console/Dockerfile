@@ -1,8 +1,14 @@
 FROM nginx:stable-alpine-slim
 
-# The official nginx image runs envsubst on /etc/nginx/templates/*.template
-# and writes the result to /etc/nginx/conf.d/*.conf on container start. :contentReference[oaicite:1]{index=1}
+# Nginx official image does envsubst on /etc/nginx/templates/*.template at startup
 COPY default.conf.template /etc/nginx/templates/default.conf.template
 
-# Remove the default site config if present
+# Export container DNS resolver into $RESOLVER before envsubst runs
+RUN printf '%s\n' \
+'#!/bin/sh' \
+'export RESOLVER="$(awk '\''/^nameserver/{print $2; exit}'\'' /etc/resolv.conf)"' \
+> /docker-entrypoint.d/14-resolver.envsh \
+&& chmod +x /docker-entrypoint.d/14-resolver.envsh
+
+# Remove default config if present
 RUN rm -f /etc/nginx/conf.d/default.conf
