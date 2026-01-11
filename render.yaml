@@ -1,5 +1,5 @@
 services:
-  # 1) MinIO API (Public - required for signed URLs)
+  # 1) MinIO API (PUBLIC - used by Django/boto3)
   - type: web
     name: minio-server
     runtime: docker
@@ -14,12 +14,20 @@ services:
         value: admin
       - key: MINIO_ROOT_PASSWORD
         sync: false
+
+      - key: MINIO_CONSOLE_PORT
+        value: "9001"
+
       - key: MINIO_BUCKET
         value: nudgytai
-      - key: MINIO_CONSOLE_PORT
-        value: "9090"
 
-  # 2) Console (Public) → proxies to minio-server:9090
+      # Recommended: app creds for Django (set these in Render Dashboard)
+      - key: MINIO_APP_USER
+        value: django
+      - key: MINIO_APP_PASSWORD
+        sync: false
+
+  # 2) Console (PUBLIC) → proxies to minio-server:9001
   - type: web
     name: minio-console
     runtime: docker
@@ -27,12 +35,10 @@ services:
     dockerfilePath: ./Dockerfile.console
     autoDeploy: false
     envVars:
-      - key: PORT
-        value: "10000"
       - key: MINIO_HOST
         fromService:
           name: minio-server
           type: web
           property: host
       - key: MINIO_CONSOLE_PORT
-        value: "9090"
+        value: "9001"

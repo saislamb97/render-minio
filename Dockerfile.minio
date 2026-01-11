@@ -1,10 +1,6 @@
 FROM minio/minio:latest
 
-# We need wget for health checks in the entrypoint script
-# (minio/minio image is minimal; don't assume wget exists)
-RUN microdnf install -y wget && microdnf clean all || true
-
-# Add MinIO Client (mc) for initialization
+# MinIO Client (mc) for bootstrap tasks (policies/users/buckets)
 COPY --from=minio/mc:latest /usr/bin/mc /usr/bin/mc
 
 COPY minio-entrypoint.sh /usr/local/bin/minio-entrypoint.sh
