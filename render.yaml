@@ -1,42 +1,57 @@
 services:
-  # -------------------------
-  # MinIO S3 Server (Public)
-  # -------------------------
   - type: web
     name: minio-server
-    env: docker
-    rootDir: server
-    plan: starter
     healthCheckPath: /minio/health/live
+    runtime: image
+    image:
+      url: docker.io/minio/minio:latest
+    dockerCommand: minio server /data --address :9000 --console-address :9090
+    autoDeploy: false
     disk:
-      name: minio-data
+      name: data
       mountPath: /data
-      sizeGB: 10
     envVars:
       - key: MINIO_ROOT_USER
-        generateValue: true
+        value: admin
       - key: MINIO_ROOT_PASSWORD
-        generateValue: true
+        value: change-me-super-secret
+      - key: MINIO_BROWSER
+        value: "on"
 
-      # Set to your public Render URLs
-      - key: MINIO_SERVER_URL
-        value: "https://minio-server-ns38.onrender.com"
-      - key: MINIO_BROWSER_REDIRECT_URL
-        value: "https://minio-console-xs8o.onrender.com"
-
-  # -------------------------
-  # MinIO Console (Public via Nginx proxy)
-  # -------------------------
   - type: web
     name: minio-console
-    env: docker
-    rootDir: console
-    plan: starter
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
+    autoDeploy: false
     envVars:
+      - key: PORT
+        value: 10000
       - key: MINIO_HOST
         fromService:
           name: minio-server
           type: web
           property: host
       - key: MINIO_CONSOLE_PORT
-        value: "9090"
+        value: 9090
+
+  - type: worker
+    name: minio-init
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./minio-init.Dockerfile
+    autoDeploy: false
+    envVars:
+      - key: MINIO_HOST
+        fromService:
+          name: minio-server
+          type: web
+          property: host
+      - key: MINIO_PORT
+        value: "9000"
+      - key: MINIO_ROOT_USER
+        value: admin
+      - key: MINIO_ROOT_PASSWORD
+        value: change-me-super-secret
+      - key: MINIO_BUCKET
+        value: nudgytai
