@@ -1,5 +1,5 @@
 services:
-  # 1) MinIO API (public, signed URLs)
+  # 1) MinIO API (Public - required for signed URLs)
   - type: web
     name: minio-server
     runtime: docker
@@ -16,11 +16,10 @@ services:
         value: change-me-super-secret
       - key: MINIO_BUCKET
         value: nudgytai
-      # Optional: keep console on this internal port
       - key: MINIO_CONSOLE_PORT
         value: "9090"
 
-  # 2) MinIO Console (public) -> proxies to minio-server:9090
+  # 2) Console (Public) → proxies to minio-server:9090
   - type: web
     name: minio-console
     runtime: docker
