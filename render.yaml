@@ -1,11 +1,10 @@
 services:
+  # 1) MinIO API (public, signed URLs)
   - type: web
     name: minio-server
-    healthCheckPath: /minio/health/live
-    runtime: image
-    image:
-      url: docker.io/minio/minio:latest
-    dockerCommand: minio server /data --address :9000 --console-address :9090
+    runtime: docker
+    dockerContext: ./minio
+    dockerfilePath: ./Dockerfile
     autoDeploy: false
     disk:
       name: data
@@ -15,43 +14,26 @@ services:
         value: admin
       - key: MINIO_ROOT_PASSWORD
         value: change-me-super-secret
-      - key: MINIO_BROWSER
-        value: "on"
+      - key: MINIO_BUCKET
+        value: nudgytai
+      # Optional: keep console on this internal port
+      - key: MINIO_CONSOLE_PORT
+        value: "9090"
 
+  # 2) MinIO Console (public) -> proxies to minio-server:9090
   - type: web
     name: minio-console
     runtime: docker
-    dockerContext: .
+    dockerContext: ./console
     dockerfilePath: ./Dockerfile
     autoDeploy: false
     envVars:
       - key: PORT
-        value: 10000
+        value: "10000"
       - key: MINIO_HOST
         fromService:
           name: minio-server
           type: web
           property: host
       - key: MINIO_CONSOLE_PORT
-        value: 9090
-
-  - type: worker
-    name: minio-init
-    runtime: docker
-    dockerContext: .
-    dockerfilePath: ./minio-init.Dockerfile
-    autoDeploy: false
-    envVars:
-      - key: MINIO_HOST
-        fromService:
-          name: minio-server
-          type: web
-          property: host
-      - key: MINIO_PORT
-        value: "9000"
-      - key: MINIO_ROOT_USER
-        value: admin
-      - key: MINIO_ROOT_PASSWORD
-        value: change-me-super-secret
-      - key: MINIO_BUCKET
-        value: nudgytai
+        value: "9090"
