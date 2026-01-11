@@ -26,7 +26,26 @@ done
 # Ensure bucket exists
 mc mb -p "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
 
-# ---- PUBLIC RW policy (anonymous read+write) ----
+# -------------------------------------------------------------------
+# 1) Ensure ROOT USER can write (fixes your PutObject 403 for admin)
+# -------------------------------------------------------------------
+cat >/tmp/root-full.json <<'POLICY'
+{
+  "Version":"2012-10-17",
+  "Statement":[{
+    "Effect":"Allow",
+    "Action":["s3:*"],
+    "Resource":["arn:aws:s3:::*","arn:aws:s3:::*/*"]
+  }]
+}
+POLICY
+
+mc admin policy create local root-full /tmp/root-full.json >/dev/null 2>&1 || true
+mc admin policy attach local root-full --user "${MINIO_ROOT_USER}" >/dev/null 2>&1 || true
+
+# -------------------------------------------------------------------
+# 2) PUBLIC READ/WRITE bucket policy (anonymous can list/get/put/delete)
+# -------------------------------------------------------------------
 cat >/tmp/public-rw.json <<POLICY
 {
   "Version": "2012-10-17",
@@ -56,7 +75,12 @@ cat >/tmp/public-rw.json <<POLICY
 POLICY
 
 mc admin policy create local "${MINIO_BUCKET}-public-rw" /tmp/public-rw.json >/dev/null 2>&1 || true
+
+# Attach to anonymous (critical)
 mc admin policy attach local "${MINIO_BUCKET}-public-rw" --user anonymous >/dev/null 2>&1 || true
+
+# Also explicitly set anonymous access (helps Console reflect non-private)
+mc anonymous set public "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
 
 echo "[minio] Bucket ${MINIO_BUCKET} is PUBLIC read/write (anonymous)."
 
