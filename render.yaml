@@ -1,0 +1,33 @@
+services:
+  # -------------------------
+  # MinIO S3 Server
+  # -------------------------
+  - type: web
+    name: minio-server
+    env: docker
+    rootDir: server
+    plan: starter
+    disk:
+      name: minio-data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: MINIO_ROOT_USER
+        generateValue: true
+      - key: MINIO_ROOT_PASSWORD
+        generateValue: true
+
+  # -------------------------
+  # MinIO Console (Web UI)
+  # -------------------------
+  - type: web
+    name: minio-console
+    env: docker
+    rootDir: console
+    plan: starter
+    envVars:
+      - key: MINIO_SERVER_URL
+        fromService:
+          name: minio-server
+          type: web
+          property: url
