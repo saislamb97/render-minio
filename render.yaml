@@ -26,8 +26,8 @@ services:
     rootDir: console
     plan: starter
     envVars:
-      - key: MINIO_SERVER_URL
+      - key: MINIO_SERVER_HOSTPORT
         fromService:
           name: minio-server
           type: web
-          property: url
+          property: hostport
