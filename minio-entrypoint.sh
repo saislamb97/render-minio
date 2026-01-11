@@ -34,11 +34,35 @@ done
 echo "[minio] Configuring mc alias..."
 mc alias set local "${MINIO_LOCAL_ENDPOINT}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" >/dev/null
 
+# ------------------------------------------------------------
+# GLOBAL FULL ACCESS POLICY (ALL BUCKETS)
+# ------------------------------------------------------------
+echo "[minio] Ensuring global full-access policy exists..."
+
+cat >/tmp/full-access.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:*"],
+      "Resource": ["arn:aws:s3:::*"]
+    }
+  ]
+}
+EOF
+
+mc admin policy create local full-access /tmp/full-access.json >/dev/null 2>&1 || true
+mc admin policy attach local full-access --user "${MINIO_ROOT_USER}" >/dev/null 2>&1 || true
+
+# ------------------------------------------------------------
+# BUCKET INIT (PRIVATE)
+# ------------------------------------------------------------
 echo "[minio] Ensuring bucket exists: ${MINIO_BUCKET}"
 mc mb -p "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
 
-echo "[minio] Enforcing PRIVATE access (no anonymous policy) for bucket: ${MINIO_BUCKET}"
+echo "[minio] Enforcing PRIVATE access (no anonymous access)"
 mc anonymous set none "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
 
-echo "[minio] Init complete."
+echo "[minio] Init complete. User '${MINIO_ROOT_USER}' has full access to ALL buckets."
 wait "${MINIO_PID}"
