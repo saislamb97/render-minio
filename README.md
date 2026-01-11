@@ -1,195 +1,235 @@
-# MinIO Stack (Render) — Signed URLs, Private Buckets
+# Render MinIO Deployment (API + Console)
 
-A **production-ready MinIO setup** designed for use with Django (or any S3-compatible client), deployed on **Render**, using:
+This repository contains a **production-ready MinIO setup for Render**, split into **two services**:
 
-* ✅ **Private buckets**
-* ✅ **Signed (pre-signed) URLs**
-* ✅ **Only 2 services** (no init worker)
-* ✅ **Public MinIO API** (required for browser downloads)
-* ✅ **Separate public Console via Nginx**
-* ✅ Clean separation from application code (Django lives elsewhere)
+1. **MinIO Server (API)** – public-facing, required for signed URLs
+2. **MinIO Console** – public-facing UI, proxied via NGINX to the MinIO server
+
+The setup is designed to work cleanly with **Render Web Services**, persistent disks, and environment-based configuration.
 
 ---
 
-## Architecture Overview
+## 🧱 Architecture Overview
 
-```text
+```
 ┌────────────────────┐
-│   Django Backend   │
-│  (separate repo)   │
+│   MinIO Console    │  (Public)
+│   NGINX Proxy      │
+│   :10000           │
 └─────────┬──────────┘
-          │  S3 API (signed URLs)
-          ▼
-┌──────────────────────────────┐
-│  MinIO API (public endpoint) │
-│  - Private bucket            │
-│  - Pre-signed URLs           │
-└─────────┬────────────────────┘
           │
           ▼
 ┌────────────────────┐
+│   MinIO Server     │  (Public)
+│   API + Console    │
+│   :PORT / :9090    │
 │   Persistent Disk  │
-│     /data          │
 └────────────────────┘
-
-┌──────────────────────────────┐
-│ MinIO Console (Nginx proxy)  │
-│ Public UI → internal :9090   │
-└──────────────────────────────┘
 ```
 
----
+### Why two services?
 
-## Repository Structure
-
-```text
-minio-stack/
-├── render.yaml
-│
-├── minio/
-│   ├── Dockerfile
-│   └── minio-entrypoint.sh
-│
-└── console/
-    ├── Dockerfile
-    └── minio-console.conf.template
-```
+* **Render assigns one public port per service**
+* MinIO exposes **API + Console on separate ports**
+* The console is exposed via **NGINX reverse proxy**
+* The API remains directly accessible for **presigned URLs**
 
 ---
 
-## Services (Exactly 2)
-
-### 1️⃣ `minio-server`
-
-* Runs the **MinIO API**
-* Publicly reachable (required for signed URLs)
-* Automatically:
-
-  * Starts MinIO
-  * Creates the bucket (idempotent)
-  * Ensures the bucket is **PRIVATE**
-* Uses a **persistent disk** mounted at `/data`
-
-### 2️⃣ `minio-console`
-
-* Lightweight **Nginx reverse proxy**
-* Exposes MinIO Console safely
-* Proxies internally to `minio-server:9090`
-* Handles WebSockets and large uploads correctly
-
----
-
-## Bucket Policy & Security Model
-
-* Bucket is **private**
-* ❌ No anonymous access
-* ✅ All downloads happen via **time-limited signed URLs**
-* Django (or any backend) controls access
-
-This is the **recommended production model**.
-
----
-
-## Deployment (Render)
-
-1. Create a new **Blueprint** on Render
-2. Connect this repository
-3. Deploy using `render.yaml`
-4. Set secrets in the Render dashboard:
-
-   * `MINIO_ROOT_PASSWORD`
-
-After deploy:
-
-* MinIO API → Render-generated service URL
-* MinIO Console → separate Render URL
-
----
-
-## Environment Variables (MinIO)
-
-### Required
-
-| Variable              | Description                      |
-| --------------------- | -------------------------------- |
-| `MINIO_ROOT_USER`     | Admin username                   |
-| `MINIO_ROOT_PASSWORD` | Admin password (store as secret) |
-| `MINIO_BUCKET`        | Bucket to auto-create            |
-| `PORT`                | Injected by Render               |
-
-### Optional
-
-| Variable             | Description                             |
-| -------------------- | --------------------------------------- |
-| `MINIO_CONSOLE_PORT` | Internal console port (default: `9090`) |
-
----
-
-## How Initialization Works (No 3rd Service)
-
-Instead of a separate init worker:
-
-* `minio-entrypoint.sh`:
-
-  * Starts MinIO
-  * Waits for health check
-  * Runs `mc` commands:
-
-    * create bucket
-    * remove anonymous policies
-  * Keeps MinIO running
-
-This keeps the stack **simple and reliable**.
-
----
-
-## Django Integration (High-Level)
-
-Django lives in a **separate repo/service** and connects via environment variables only.
-
-### Django uses:
-
-* `django-storages`
-* `boto3`
-* MinIO **public API URL**
-* **Signed URLs** for access
-
-### Result:
-
-* Django uploads files
-* Django returns signed URLs
-* Browser downloads directly from MinIO
-* Django does **not** serve media files
-
----
-
-## Example Signed URL
-
-```text
-https://<minio-api-domain>/nudgytai/media/file.png
-  ?X-Amz-Algorithm=AWS4-HMAC-SHA256
-  &X-Amz-Credential=...
-  &X-Amz-Signature=...
-  &X-Amz-Expires=3600
-```
-
-* Valid for a limited time
-* Cannot be guessed
-* Bucket remains private
-
----
-
-## Health Checks
-
-### MinIO API
-
-```
-GET /minio/health/live
-GET /minio/health/ready
-```
-
-### Example
+## 📂 Repository Structure
 
 ```bash
-curl https://<minio-server-url>/minio/health/live
+.
+├── Dockerfile.minio          # MinIO server image
+├── Dockerfile.console        # NGINX console proxy
+├── minio-entrypoint.sh       # MinIO bootstrap & init logic
+├── minio-console.conf.template  # NGINX config template
+├── render.yaml               # Render infrastructure definition
+└── README.md
+```
+
+---
+
+## 🐳 Docker Images
+
+### 1️⃣ MinIO Server (`Dockerfile.minio`)
+
+* Based on `minio/minio:latest`
+* Adds:
+
+  * `wget` (for health checks)
+  * `mc` (MinIO Client) for initialization
+* Uses a **custom entrypoint** to:
+
+  * Start MinIO
+  * Wait for readiness
+  * Create bucket
+  * Enforce private access
+
+```dockerfile
+FROM minio/minio:latest
+
+RUN microdnf install -y wget && microdnf clean all || true
+
+COPY --from=minio/mc:latest /usr/bin/mc /usr/bin/mc
+COPY minio-entrypoint.sh /usr/local/bin/minio-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/minio-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/minio-entrypoint.sh"]
+```
+
+---
+
+### 2️⃣ MinIO Console Proxy (`Dockerfile.console`)
+
+* Based on `nginx:stable-alpine-slim`
+* Uses **NGINX templates** to inject environment variables
+* Proxies WebSocket + HTTP traffic to MinIO Console
+
+```dockerfile
+FROM nginx:stable-alpine-slim
+
+RUN rm -f /etc/nginx/conf.d/default.conf \
+    /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+
+COPY minio-console.conf.template /etc/nginx/templates/minio-console.conf.template
+```
+
+---
+
+## ⚙️ MinIO Entrypoint Logic
+
+`minio-entrypoint.sh` performs **safe, idempotent initialization**:
+
+### What it does
+
+1. Validates required environment variables
+2. Starts MinIO (API + Console)
+3. Waits for readiness
+4. Configures `mc` alias
+5. Creates bucket (if missing)
+6. Enforces **private access**
+7. Handles graceful shutdown
+
+### Required environment variables
+
+```bash
+MINIO_ROOT_USER
+MINIO_ROOT_PASSWORD
+MINIO_BUCKET
+PORT                # Injected by Render
+```
+
+---
+
+## 🌐 NGINX Console Proxy
+
+`minio-console.conf.template`:
+
+* Uses environment variables injected by Render
+* Supports:
+
+  * WebSockets (required for MinIO Console)
+  * Large uploads
+  * Long-lived connections
+
+```nginx
+upstream minio_console {
+    server ${MINIO_HOST}:${MINIO_CONSOLE_PORT};
+    keepalive 32;
+}
+
+server {
+    listen ${PORT};
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_pass http://minio_console;
+    }
+}
+```
+
+---
+
+## 🚀 Render Deployment (`render.yaml`)
+
+### Service 1: MinIO Server
+
+```yaml
+- type: web
+  name: minio-server
+  runtime: docker
+  dockerfilePath: ./Dockerfile.minio
+  disk:
+    name: data
+    mountPath: /data
+  envVars:
+    - key: MINIO_ROOT_USER
+      value: admin
+    - key: MINIO_ROOT_PASSWORD
+      sync: false
+    - key: MINIO_BUCKET
+      value: nudgytai
+    - key: MINIO_CONSOLE_PORT
+      value: "9090"
+```
+
+* Public API access
+* Persistent disk at `/data`
+* Required for signed URLs
+
+---
+
+### Service 2: MinIO Console
+
+```yaml
+- type: web
+  name: minio-console
+  runtime: docker
+  dockerfilePath: ./Dockerfile.console
+  envVars:
+    - key: PORT
+      value: "10000"
+    - key: MINIO_HOST
+      fromService:
+        name: minio-server
+        type: web
+        property: host
+    - key: MINIO_CONSOLE_PORT
+      value: "9090"
+```
+
+* Public UI
+* Proxies traffic to `minio-server:9090`
+
+---
+
+## 🔐 Security Notes
+
+* Buckets are **PRIVATE by default**
+* No anonymous access is allowed
+* All access should be via:
+
+  * MinIO credentials
+  * Presigned URLs
+
+---
+
+## ✅ Use Cases
+
+* S3-compatible object storage
+* Signed upload/download URLs
+* Private media storage
+* Backend-friendly blob storage
+
+---
+
+## 🧪 Local Development (Optional)
+
+```bash
+docker build -f Dockerfile.minio -t minio-server .
+docker build -f Dockerfile.console -t minio-console .
 ```
