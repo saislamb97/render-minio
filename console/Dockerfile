@@ -1,5 +1,4 @@
 FROM minio/minio:latest
 
-# Render provides PORT
-# We build https://<hostport> dynamically
-CMD ["sh", "-c", "minio console --address :${PORT} https://${MINIO_SERVER_HOSTPORT}"]
+# Console connects to the server using full HTTPS URL
+CMD ["console", "--address", ":${PORT}", "https://${MINIO_SERVER_HOSTPORT}"]

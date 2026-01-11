@@ -1,3 +1,6 @@
 FROM minio/minio:latest
 
-CMD ["sh", "-c", "minio server /data --address :${PORT}"]
+# IMPORTANT:
+# MinIO image already has ENTRYPOINT ["minio"]
+# So CMD must ONLY contain MinIO arguments
+CMD ["server", "/data", "--address", ":${PORT}"]
