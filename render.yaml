@@ -1,9 +1,10 @@
 services:
+  # 1) MinIO API (Public - required for signed URLs)
   - type: web
     name: minio-server
     runtime: docker
     dockerContext: .
-    dockerfilePath: ./minio/Dockerfile
+    dockerfilePath: ./Dockerfile.minio
     autoDeploy: false
     disk:
       name: data
@@ -12,17 +13,18 @@ services:
       - key: MINIO_ROOT_USER
         value: admin
       - key: MINIO_ROOT_PASSWORD
-        value: change-me-super-secret
+        sync: false
       - key: MINIO_BUCKET
         value: nudgytai
       - key: MINIO_CONSOLE_PORT
         value: "9090"
 
+  # 2) Console (Public) → proxies to minio-server:9090
   - type: web
     name: minio-console
     runtime: docker
     dockerContext: .
-    dockerfilePath: ./console/Dockerfile
+    dockerfilePath: ./Dockerfile.console
     autoDeploy: false
     envVars:
       - key: PORT
