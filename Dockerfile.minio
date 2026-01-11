@@ -1,6 +1,6 @@
 FROM minio/minio:latest
 
-# MinIO Client (mc) for bootstrap tasks (policies/users/buckets)
+# include mc for bootstrap
 COPY --from=minio/mc:latest /usr/bin/mc /usr/bin/mc
 
 COPY minio-entrypoint.sh /usr/local/bin/minio-entrypoint.sh
