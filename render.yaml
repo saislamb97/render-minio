@@ -1,12 +1,13 @@
 services:
   # -------------------------
-  # MinIO S3 Server
+  # MinIO S3 Server (Public)
   # -------------------------
   - type: web
     name: minio-server
     env: docker
     rootDir: server
     plan: starter
+    healthCheckPath: /minio/health/live
     disk:
       name: minio-data
       mountPath: /data
@@ -17,8 +18,16 @@ services:
       - key: MINIO_ROOT_PASSWORD
         generateValue: true
 
+      # Bind addresses/ports explicitly (avoids ${PORT} expansion issues)
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "9000"
+      - key: CONSOLE_PORT
+        value: "9090"
+
   # -------------------------
-  # MinIO Console (Web UI)
+  # MinIO Console (Public URL via Nginx proxy)
   # -------------------------
   - type: web
     name: minio-console
@@ -26,8 +35,17 @@ services:
     rootDir: console
     plan: starter
     envVars:
-      - key: MINIO_SERVER_HOSTPORT
+      # Nginx listens on this port inside the container
+      - key: PORT
+        value: "10000"
+
+      # Point nginx to the INTERNAL host of minio-server
+      - key: MINIO_HOST
         fromService:
           name: minio-server
           type: web
-          property: hostport
+          property: host
+
+      # Console port on the minio-server container
+      - key: MINIO_CONSOLE_PORT
+        value: "9090"
