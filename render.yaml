@@ -16,7 +16,7 @@ services:
       - key: MINIO_CONSOLE_PORT
         value: "9001"
       - key: MINIO_BUCKET
-        value: nudgytai
+        value: coach
 
   - type: web
     name: minio-console
