@@ -15,8 +15,6 @@ services:
         sync: false
       - key: MINIO_CONSOLE_PORT
         value: "9001"
-      - key: MINIO_BUCKET
-        value: coach
 
   - type: web
     name: minio-console

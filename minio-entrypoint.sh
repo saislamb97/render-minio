@@ -3,8 +3,10 @@ set -eu
 
 : "${MINIO_ROOT_USER?}"
 : "${MINIO_ROOT_PASSWORD?}"
-: "${MINIO_BUCKET?}"
 : "${PORT?}"
+
+# Optional: keep for compatibility, but we will create both buckets anyway
+: "${MINIO_BUCKET:=coach}"
 
 MINIO_API_PORT="${PORT}"
 MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
@@ -23,8 +25,14 @@ until mc alias set local "${LOCAL}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}
   sleep 1
 done
 
-# Ensure bucket exists
-mc mb -p "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
+# -------------------------------------------------------------------
+# Create BOTH buckets: coach + coach-staging
+# -------------------------------------------------------------------
+BUCKETS="coach coach-staging"
+
+for B in $BUCKETS; do
+  mc mb -p "local/$B" >/dev/null 2>&1 || true
+done
 
 # -------------------------------------------------------------------
 # 1) Ensure ROOT USER can write (fixes your PutObject 403 for admin)
@@ -32,11 +40,13 @@ mc mb -p "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
 cat >/tmp/root-full.json <<'POLICY'
 {
   "Version":"2012-10-17",
-  "Statement":[{
-    "Effect":"Allow",
-    "Action":["s3:*"],
-    "Resource":["arn:aws:s3:::*","arn:aws:s3:::*/*"]
-  }]
+  "Statement":[
+    {
+      "Effect":"Allow",
+      "Action":["s3:*"],
+      "Resource":["arn:aws:s3:::*","arn:aws:s3:::*/*"]
+    }
+  ]
 }
 POLICY
 
@@ -45,8 +55,10 @@ mc admin policy attach local root-full --user "${MINIO_ROOT_USER}" >/dev/null 2>
 
 # -------------------------------------------------------------------
 # 2) PUBLIC READ/WRITE bucket policy (anonymous can list/get/put/delete)
+# Apply to BOTH buckets
 # -------------------------------------------------------------------
-cat >/tmp/public-rw.json <<POLICY
+for B in $BUCKETS; do
+  cat >"/tmp/${B}-public-rw.json" <<POLICY
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -55,7 +67,7 @@ cat >/tmp/public-rw.json <<POLICY
       "Effect": "Allow",
       "Principal": "*",
       "Action": ["s3:ListBucket"],
-      "Resource": ["arn:aws:s3:::${MINIO_BUCKET}"]
+      "Resource": ["arn:aws:s3:::${B}"]
     },
     {
       "Sid": "PublicReadWriteObjects",
@@ -68,20 +80,21 @@ cat >/tmp/public-rw.json <<POLICY
         "s3:AbortMultipartUpload",
         "s3:ListMultipartUploadParts"
       ],
-      "Resource": ["arn:aws:s3:::${MINIO_BUCKET}/*"]
+      "Resource": ["arn:aws:s3:::${B}/*"]
     }
   ]
 }
 POLICY
 
-mc admin policy create local "${MINIO_BUCKET}-public-rw" /tmp/public-rw.json >/dev/null 2>&1 || true
+  mc admin policy create local "${B}-public-rw" "/tmp/${B}-public-rw.json" >/dev/null 2>&1 || true
 
-# Attach to anonymous (critical)
-mc admin policy attach local "${MINIO_BUCKET}-public-rw" --user anonymous >/dev/null 2>&1 || true
+  # Attach to anonymous (critical)
+  mc admin policy attach local "${B}-public-rw" --user anonymous >/dev/null 2>&1 || true
 
-# Also explicitly set anonymous access (helps Console reflect non-private)
-mc anonymous set public "local/${MINIO_BUCKET}" >/dev/null 2>&1 || true
+  # Also explicitly set anonymous access (helps Console reflect non-private)
+  mc anonymous set public "local/${B}" >/dev/null 2>&1 || true
 
-echo "[minio] Bucket ${MINIO_BUCKET} is PUBLIC read/write (anonymous)."
+  echo "[minio] Bucket ${B} is PUBLIC read/write (anonymous)."
+done
 
 wait "$PID"
