@@ -5,9 +5,6 @@ set -eu
 : "${MINIO_ROOT_PASSWORD?}"
 : "${PORT?}"
 
-# Optional: keep for compatibility, but we will create both buckets anyway
-: "${MINIO_BUCKET:=coach}"
-
 MINIO_API_PORT="${PORT}"
 MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
 
@@ -26,9 +23,9 @@ until mc alias set local "${LOCAL}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}
 done
 
 # -------------------------------------------------------------------
-# Create BOTH buckets: coach + coach-staging
+# Create BOTH buckets: media + media-stage
 # -------------------------------------------------------------------
-BUCKETS="coach coach-staging"
+BUCKETS="media media-stage"
 
 for B in $BUCKETS; do
   mc mb -p "local/$B" >/dev/null 2>&1 || true
